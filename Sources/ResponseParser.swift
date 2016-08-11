@@ -58,19 +58,17 @@ var responseSettings: http_parser_settings = {
     return settings
 }()
 
-public final class ResponseParser : S4.ResponseParser {
-    let stream: Stream
+public final class ResponseParser {
     let context: ResponseContext
     var parser = http_parser()
     var responses: [Response] = []
     let bufferSize: Int
     
-    convenience public init(stream: Stream) {
-        self.init(stream: stream, bufferSize: 2048)
+    convenience public init() {
+        self.init(bufferSize: 2048)
     }
     
-    public init(stream: Stream, bufferSize: Int) {
-        self.stream = stream
+    public init(bufferSize: Int) {
         self.bufferSize = bufferSize
         self.context = ResponseContext.allocate(capacity: 1)
         self.context.initialize(to: ResponseParserContext { response in
@@ -89,21 +87,20 @@ public final class ResponseParser : S4.ResponseParser {
         parser.data = UnsafeMutableRawPointer(context)
     }
     
-    public func parse() throws -> Response {
-        while true {
-            if let response = responses.popLast() {
-                return response
-            }
-            
-            let data = try stream.receive(upTo: bufferSize)
-            let pointer = UnsafeRawPointer(data.bytes).assumingMemoryBound(to: Int8.self)
-            let bytesParsed = http_parser_execute(&parser, &responseSettings, pointer, data.count)
-            
-            guard bytesParsed == data.count else {
-                defer { resetParser() }
-                throw http_errno(parser.http_errno)
-            }
+    public func parse(data: Data) throws -> Response? {
+        let pointer = UnsafeRawPointer(data.bytes).assumingMemoryBound(to: Int8.self)
+        let bytesParsed = http_parser_execute(&parser, &responseSettings, pointer, data.count)
+        
+        guard bytesParsed == data.count else {
+            defer { resetParser() }
+            throw http_errno(parser.http_errno)
         }
+        
+        if let response = responses.popLast() {
+            return response
+        }
+        
+        return nil
     }
 }
 

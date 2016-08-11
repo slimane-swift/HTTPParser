@@ -57,19 +57,17 @@ var requestSettings: http_parser_settings = {
     return settings
 }()
 
-public final class RequestParser : S4.RequestParser {
-    let stream: Stream
+public final class RequestParser {
     let context: RequestContext
     var parser = http_parser()
     var requests: [Request] = []
     let bufferSize: Int
     
-    convenience public init(stream: Stream) {
-        self.init(stream: stream, bufferSize: 2048)
+    convenience public init() {
+        self.init(bufferSize: 2048)
     }
     
-    public init(stream: Stream, bufferSize: Int) {
-        self.stream = stream
+    public init(bufferSize: Int) {
         self.bufferSize = bufferSize
         self.context = RequestContext.allocate(capacity: 1)
         self.context.initialize(to: RequestParserContext { request in
@@ -88,21 +86,19 @@ public final class RequestParser : S4.RequestParser {
         parser.data = UnsafeMutableRawPointer(context)
     }
     
-    public func parse() throws -> Request {
-        while true {
-            if let request = requests.popLast() {
-                return request
-            }
-            
-            let data = try stream.receive(upTo: bufferSize)
-            let p = UnsafeRawPointer(data.bytes).assumingMemoryBound(to: Int8.self)
-            let bytesParsed = http_parser_execute(&parser, &requestSettings, p, data.count)
-            
-            guard bytesParsed == data.count else {
-                defer { resetParser() }
-                throw http_errno(parser.http_errno)
-            }
+    public func parse(_ data: Data) throws -> Request? {
+        let p = UnsafeRawPointer(data.bytes).assumingMemoryBound(to: Int8.self)
+        let bytesParsed = http_parser_execute(&self.parser, &requestSettings, p, data.count)
+        guard bytesParsed == data.count else {
+            defer { self.resetParser() }
+            throw http_errno(self.parser.http_errno)
         }
+        
+        if let request = requests.popLast() {
+            return request
+        }
+        
+        return nil
     }
 }
 
