@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import HTTPParserTestSuite
+@testable import HTTPParserTests
 
 XCTMain([
     testCase(RequestParserTests.allTests),
